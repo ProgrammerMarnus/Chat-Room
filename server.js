@@ -1,20 +1,22 @@
+import { createServer } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
 
-const PORT = process.env.PORT || 8080;
-const wss = new WebSocketServer({ port: PORT });
+// Render receives https/wss requests, terminates SSL, and forwards http traffic here
+const server = createServer((req, res) => {
+  res.writeHead(200, { "Content-Type": "text/plain" });
+  res.end("Wire Server Active");
+});
 
-// Track connected clients
+const wss = new WebSocketServer({ server });
 const clients = new Set();
 
 wss.on("connection", (ws, req) => {
   clients.add(ws);
   const ip = req.socket.remoteAddress;
-  console.log(`[+] Client connected from ${ip}. Total clients: ${clients.size}`);
+  console.log(`[+] Client connected from ${ip}. Total: ${clients.size}`);
 
   ws.on("message", (data) => {
     let payload;
-    
-    // Attempt to parse expected JSON payload structure
     try {
       const parsed = JSON.parse(data.toString());
       payload = JSON.stringify({
@@ -22,14 +24,12 @@ wss.on("connection", (ws, req) => {
         text: parsed.text || "",
       });
     } catch {
-      // Fallback for plain-text messages
       payload = JSON.stringify({
         name: "guest",
         text: data.toString(),
       });
     }
 
-    // Broadcast message to all OTHER connected clients
     clients.forEach((client) => {
       if (client !== ws && client.readyState === WebSocket.OPEN) {
         client.send(payload);
@@ -39,12 +39,13 @@ wss.on("connection", (ws, req) => {
 
   ws.on("close", () => {
     clients.delete(ws);
-    console.log(`[-] Client disconnected. Total clients: ${clients.size}`);
+    console.log(`[-] Client disconnected. Total: ${clients.size}`);
   });
 
-  ws.on("error", (error) => {
-    console.error(`[!] WebSocket error: ${error.message}`);
-  });
+  ws.on("error", (err) => console.error(`[!] WS Error: ${err.message}`));
 });
 
-console.log(`🚀 Wire WebSocket server running on ws://localhost:${PORT}`);
+const PORT = process.env.PORT || 10000;
+server.listen(PORT, () => {
+  console.log(`🚀 Server listening on port ${PORT}`);
+});
